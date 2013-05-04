@@ -1,0 +1,58 @@
+Possible improvements:
+- Convert (end value) to (value end)?
+  Why did I do it this way?
+  - nil may be a valid value; but it may not be a valid index
+  - see grammar-exception (which currently doesn't exploit this order)
+
+  However, users probably want the value more often than the end index...
+
+- Loop-detection logic
+  Each rule tracks its invocations.
+  When called, push the string and start to a list.
+  If the same (string start) pair is already on the list, then the current 
+  invocation should return nil (to escape the left-recursive loop).
+  When finished, pop the string and start.
+
+  Simplification: Assume the user only parses one string at a time => only need to store the index.
+
+- Input streams
+  Generalize from a parse string to a parse buffer
+  e.g. buffer a file as it is being read
+
+  Provide a mechanism for explicitely flushing the buffer 
+
+- Error reporting
+  Track the deepest partial parse; assume its termination indicates the error location.
+  Provide hooks for diagnosing/reporting/fixing the error.
+
+- Provide line/column information (especially for parsed files)
+  Allow this to propagate through nested calls (as in ISO14977:syntax).
+
+- add EBNF syntax for grammar-func, error reporting, buffer flushing, etc.
+
+  The EBNF spec notes that a meta-identifier cannot be followed by '(' and suggests using
+  this to extend the metalanguage...  Maybe use '<' and '>' ?
+
+  Probably also define some standard grammar-func transformations (maybe grammar-copy and grammar-ignore?).
+
+- Store meta-information in the rules to allow for algebraic simplification
+  e.g. "r1='a'|'b'|'c'; r2=r1-'b';" could simplify to "r1='a'|'b'|'c'; r2='a'|'c';".
+
+- Write user documentation
+  Explain why I didn't use a table-based parser
+  - Easily understood
+  - Simplest translation from grammar to parser code; no transformations required.
+  - No grammar restrictions (once left-recursion is eliminated)
+  - Computers are fast enough; people who need the speed for large parses can add the tables.
+  - Rules can be individually implemented/tested/extended at runtime
+
+  Illustrate input/output pairs for each of grammar-XX.
+  (Also look for improvements in how the output is generated.)
+
+- Provide grammars for other common source types
+  - date/number/IP strings
+  - XML/HTML
+  - (La)TeX
+  - CORBA IDL
+
+- Add an interactive (graphical?) editor/debugger

@@ -1,0 +1,121 @@
+\section{Why another parser?}
+
+- EBNF is a good standard, but there aren't many readily-available implementations
+
+- I would like an easy-to-use, general-purpose system that converts parsed text into Lisp s-expressions.
+
+- Lisp's readtable system is powerful but not enough.  ("Case translating"?!?  Come on!  My C64 had decent lowercase support.)
+It is my hope that a simple parser framework will promote the development of alternative input syntax for those who don't grok sexp's.
+Lisp users often implement DSL's; why not domain-specific syntax as well?  I guess its readtable limitations.
+
+- Treat Lisp as a "virtual machine"
+With a good input parser and output formatter, it shouldn't be too hard to compile other languages into Lisp, do some macro transforms, and "macroexpand" these changes for the user in the original language...  Write your compiler as Lisp macros and don't bother writing a new VM; Lisp is the byte code.
+
+\section{User guide}
+
+As of now, this library is rather easily used.  Almost everything can be understood from the following illustrative examples.
+For more information, read the ISO-14977 spec or watch how the \emph{defgrammar} macro is expanded.
+
+An EBNF rule has the following specification:
+\mbox{\emph{syntax rule = meta identifier, '=', definitions list, ';'}}
+
+Each rule returns a pair of values -- its endpoint in the string, and the value of its match.  If the match fails, then the rule 
+simply returns nil.
+
+Why return (endpoint value) instead of (value endpoint)?  Since nil is never a valid endpoint, the rule can return nil on no match.
+However, nil may be a valid return value; (value endpoint) would require failed matches to return (nil nil).  (The value used by
+multiple-value-bind when a parameter is missing is implementation-specific.)
+
+One alternative is to signal a condition or trigger a throw instead of returning nil...
+
+String literals are represented by '...' or "..."; the literal is returned upon a successful match.
+\begin{example}
+(defgrammar "rule1='ab';")
+(defgrammar "rule2='\"';")
+(defgrammar "rule3=\"'\";")
+(rule1 "abc") => (2 "ab")
+(rule2 "\"abc\"") => (1 "\"")
+(rule3 "'abc'") => (1 "'")
+\end{example}
+
+Meta identifiers may contain whitespace; but (for now) it is simply stripped out.
+\begin{example}
+(defgrammar "rule 1='a';")
+(|rule 1| "abc") => function |rule 1| is undefined
+(rule1 "abc") => (1 "a")
+\end{example}
+
+Rules may be empty; empty rules always return nil (no match).
+\begin{example}
+(defgrammar "rule=;") ; may throw warnings
+(rule "abc") => nil
+\end{example}
+
+Multiple rules may be contained in a single grammar definition.
+\begin{example}
+(defgrammar "rule1='a'; rule2='b';")
+(rule1 "a") => (1 "a")
+(rule1 "b") => nil
+(rule2 "a") => nil
+(rule2 "b") => (1 "b")
+\end{example}
+
+A \emph{definitions list} returns the first definition which matches, or nil if none match.
+\begin{example}
+(defgrammar "rule='a' | 'b';")
+(rule "abc") => (1 "a")
+(rule "bcd") => (1 "b")
+(rule "cde") => nil
+\end{example}
+
+A \emph{single definition} returns the match if it has a single clause, or a list of matches if it has concatenated clauses.
+\begin{example}
+(defgrammar "rule1='a'; rule2='a', 'b';")
+(rule1 "abc") => (1 "a")
+(rule2 "abc") => (2 ("a" "b"))
+\end{example}
+
+An \emph{optional sequence} returns a match or nil.
+\begin{example}
+(defgrammar "rule=['a'];")
+(rule "a") => (1 "a")
+(rule "b") => (0 nil)
+\end{example}
+
+A \emph{repeated sequence} (equivalent to the Kleene-star) returns a list of results.
+\begin{example}
+(defgrammar "rule={'a'};")
+(rule "aaa") => (3 ("a" "a" "a"))
+(rule "a") => (1 ("a"))
+\end{example}
+
+Note: The Kleene-plus is equivalent to "X,{X}".
+
+A \emph{grouped sequence} can be used to override operator precedence.
+\begin{example}
+(defgrammar "rule1='a', 'b' | 'c'; rule2='a', ('b' | 'c');")
+(rule1 "abc") => (2 ("a" "b"))
+(rule1 "ace") => nil
+(rule2 "abc") => (2 ("a" "b"))
+(rule2 "ace") => (2 ("a" "c"))
+\end{example}
+
+Rules may call other rules (just like other Lisp functions).
+\begin{example}
+(defgrammar "rule1='a'; rule2=rule1, 'b';")
+(rule1 "abc") => (1 "a")
+(rule2 "abc") => (2 ("a" "b"))
+\end{example}
+
+Rules may contain comments almost anywhere.  They are not supposed to appear in meta identifiers, integers, special sequences, or strings; but (for now) they are simply stripped out of anything but strings.
+\begin{example}
+(defgrammar "(* test *) rule (*x*) 1=1 (*y*) 0 * 'a' (*z*); rule2='a(*x*)';")
+(rule1 "aaaaaaaaaaa") => (10 ("a" ... "a"))
+(rule2 "a(*x*)b") => (6 "a(*x*)")
+\end{example}
+
+An \emph{exception} may be used to exclude certain matches from a rule.  In "rule=X-Y;", a match occurs when X matches but Y does not.
+\begin{example}
+(defgrammar "rule={('a'|'b'|'c')-'b'};")
+(rule "acbca") => (2 ("a" "c"))
+\end{example}
